@@ -2,7 +2,7 @@
   "name": "slate",
   "private": true,
   "author": "Shopify Inc.",
-  "version": "v1.0.0-alpha.25",
+  "version": "v1.0.0-alpha.25F",
   "description":
     "A theme scaffold and command line tool for developing Shopify themes.",
   "keywords": ["slate", "shopify", "theme", "CLI"],
