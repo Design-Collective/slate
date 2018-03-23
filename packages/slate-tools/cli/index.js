@@ -2,7 +2,7 @@
 const spawn = require('cross-spawn');
 const analytics = require('@shopify/slate-analytics');
 const {getSlateConfig} = require('@shopify/slate-config');
-const packageJson = require('./package.json');
+const packageJson = require('../package.json');
 
 const script = process.argv[2];
 const args = process.argv.slice(3);
@@ -22,15 +22,17 @@ async function init() {
     case 'deploy':
     case 'start':
     case 'zip':
+    case 'lint':
+    case 'format':
       result = spawn.sync(
         'node',
-        [require.resolve(`./scripts/${script}`)].concat(args),
+        [require.resolve(`./commands/${script}`)].concat(args),
         {stdio: 'inherit'},
       );
       process.exit(result.status);
       break;
     case 'test':
-      result = spawn.sync('./node_modules/jest/bin/jest.js', [].concat(args), {
+      result = spawn.sync('../node_modules/jest/bin/jest.js', [].concat(args), {
         stdio: 'inherit',
       });
       process.exit(result.status);

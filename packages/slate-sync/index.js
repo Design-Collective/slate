@@ -1,8 +1,11 @@
-/* eslint-disable */
 const prompt = require('react-dev-utils/prompt');
+const chalk = require('chalk');
+const figures = require('figures');
 const themekit = require('@shopify/themekit').command;
 const slateEnv = require('@shopify/slate-env');
-const config = require('../config');
+const config = require('./slate-sync.config');
+const skipSettingData = require('./skip-settings-data');
+const continueIfPublished = require('./continue-if-published');
 
 let deploying = false;
 let filesToDeploy = [];
@@ -52,15 +55,38 @@ function _generateIgnoreFlags() {
  * @param   files   Array     An array of files to deploy
  * @return          Promise
  */
-function deploy(cmd = '', files = []) {
+async function deploy(cmd = '', files = []) {
   if (!['upload', 'replace'].includes(cmd)) {
     throw new Error(
-      'shopify-deploy.deploy() first argument must be either "upload", "replace"'
+      'shopify-deploy.deploy() first argument must be either "upload", "replace"',
     );
   }
 
   deploying = true;
 
+  if (!await continueIfPublished()) {
+    process.exit(0);
+  }
+
+  if (await skipSettingData(files)) {
+    files = files.filter(file => !file.endsWith('settings_data.json'));
+  }
+
+  console.log(chalk.magenta(`\n${figures.arrowUp}  Uploading to Shopify...\n`));
+
+  try {
+    await promiseThemekitConfig();
+    await promiseThemekitDeploy(cmd, files);
+  } catch (error) {
+    console.error(error);
+  }
+
+  deploying = false;
+
+  return maybeDeploy;
+}
+
+function promiseThemekitConfig() {
   return new Promise((resolve, reject) => {
     themekit(
       {
@@ -71,70 +97,52 @@ function deploy(cmd = '', files = []) {
         ],
         cwd: config.paths.dist,
       },
-      () => {
-        themekit(
-          {
-            args: [
-              cmd,
-              '--no-update-notifier',
-              ..._generateConfigFlags(),
-              ...files,
-            ],
-            cwd: config.paths.dist,
-          },
-          err => {
-            deploying = false;
-
-            if (err) {
-              reject(err);
-            } else {
-              resolve();
-            }
-          }
-        );
-      }
+      err => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      },
     );
-  })
-    .then(() => {
-      deploying = false;
-      return maybeDeploy();
-    })
-    .catch(err => {
-      deploying = false;
-      console.error(err);
-      return maybeDeploy();
-    });
+  });
+}
+
+function promiseThemekitDeploy(cmd, files) {
+  return new Promise((resolve, reject) => {
+    themekit(
+      {
+        args: [
+          cmd,
+          '--no-update-notifier',
+          ..._generateConfigFlags(),
+          ...files,
+        ],
+        cwd: config.paths.dist,
+      },
+      err => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      },
+    );
+  });
 }
 
 module.exports = {
-  sync(files = []) {
+  async sync(files = []) {
     if (!files.length) {
       return Promise.reject('No files to deploy.');
     }
 
-    return new Promise((resolve, reject) => {
-      // remove duplicate
-      filesToDeploy = [...new Set([...filesToDeploy, ...files])];
+    filesToDeploy = [...new Set([...filesToDeploy, ...files])];
 
-      maybeDeploy()
-        .then(resolve)
-        .catch(reject);
-    });
+    return maybeDeploy();
   },
 
-  overwrite(env) {
-    return new Promise((resolve, reject) => {
-      const message = `\nEnvironment is ${slateEnv.getEnvNameValue()}. Go ahead with "replace" ?`;
-
-      prompt(message, false).then(isYes => {
-        if (isYes) {
-          deploy('replace')
-            .then(resolve)
-            .catch(reject);
-        } else {
-          reject('Aborting. You aborted the deploy.');
-        }
-      });
-    });
+  async overwrite(env) {
+    return deploy('replace');
   },
 };
